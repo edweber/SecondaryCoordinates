@@ -1,0 +1,13 @@
+[general]
+name=SecondaryCoordinates
+qgisMinimumVersion=3.38
+description=Display a secondary coordinate system in the tool bar.
+version=0.1.1
+experimental=true
+author=Ed Weber
+email=ed.weber@noaa.gov
+category=Map Canvas
+tags=coordinates, coordinate, crs, transformation
+homepage=https://github.com/edweber/SecondaryCoordinates
+repository=https://github.com/edweber/SecondaryCoordinates
+tracker=https://github.com/edweber/SecondaryCoordinates/issues

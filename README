@@ -1,0 +1,18 @@
+This is a QGIS plugin to show a secondary coordinate system in the Statusbar (lower left).
+For example, EPSG units or CalCOFI line/station
+
+Tool tips explain all options. 
+
+Install in QGIS:
+  1. Plugins -> Manage and Install Plugins -> Settings,
+  click the Add button for plugin repositories:
+  
+  2. Name: SecondaryCoordinates
+     URL: https://raw.githubusercontent.com/edweber/SecondaryCoordinates/refs/heads/main/plugins.xml
+    Ok
+  
+  3. Not Installed, Search or locate SecondaryCoordinates
+     Install Plugin
+
+You could also just download the SecondaryCoordinates.zip file from github and install in QGIS
+
