@@ -15,7 +15,8 @@ from qgis.PyQt.QtWidgets import (
 from qgis.PyQt.QtCore import Qt, QSettings, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QStyle
-from qgis.core import QgsProject, QgsCoordinateReferenceSystem, QgsCoordinateTransform
+from qgis.core import (QgsProject, QgsCoordinateReferenceSystem,
+                       QgsCoordinateTransform, QgsCsException)
 from qgis.gui import QgisInterface
 from osgeo import osr
 
@@ -31,6 +32,12 @@ def get_transform(crs):
     e.g., 6414, "EPSG:6414", "+proj=calcofi",
     or 'PROJCS["NAD83(2011) / California Albers...",
     """
+    src_crs = QgsProject.instance().crs()
+    if src_crs is None:
+        # can be None at startup before a project is open
+        # assume lon/lat and change as needed
+        src_crs = QgsCoordinateReferenceSystem("EPSG:4326")
+
     if type(crs) is str:
         if crs.startswith("+proj=calcofi"):
             return ("+proj=calcofi +ellps=clrk66", CalcofiTransformer())
@@ -49,7 +56,7 @@ def get_transform(crs):
             # don't want to store dups, e.g., 6414 and EPSG:6414
             crs = "EPSG:" + str(crs)
         trans = QgsCoordinateTransform(
-            QgsProject.instance().crs(), qcrs, QgsProject.instance()
+            src_crs, qcrs, QgsProject.instance()
         )
         return (crs, trans)
     return None
@@ -62,22 +69,53 @@ class CalcofiTransformer:
     CalCOFI coordinates
 
     This is used in place of a qgis._core.QgsCoordinateReferenceSystem
-    here
+    here. Probably should have just subclassed it.
     """
-
     def __init__(self):
+        # convert current crs from qgis to osgeo.osr
+        # need to have sourceCrs and setSourceCrs methods
+        # to align with QgsCoordinateReferenceSystem objects
+        self.src_crs = None
+        self.crs = None
+
+        self.setSourceCrs()
+
+    def sourceCrs(self):
+        return self.src_crs
+
+    def setSourceCrs(self, src_crs=None):
+        """
+        src_crs is a QgsCoordinateReferenceSystem object
+        """
+        if src_crs is None:
+            self.src_crs = QgsProject.instance().crs()
+        else:
+            self.src_crs = src_crs
+
+        if self.src_crs is None:
+            # can be None at startup before a project is open
+            # assume lon/lat and change as needed
+            self.src_crs = QgsCoordinateReferenceSystem("EPSG:4326")
+
+        #ll_srs = osr.SpatialReference()
+        #ll_srs.ImportFromEPSG(4326)
+        src_srs = osr.SpatialReference()
+        src_srs.ImportFromWkt(self.src_crs.toWkt())
+
         srs = osr.SpatialReference()
         srs.ImportFromProj4("+proj=calcofi +ellps=clrk66")
-        ll_srs = osr.SpatialReference()
-        ll_srs.ImportFromEPSG(4326)
-        self.crs = osr.CoordinateTransformation(ll_srs, srs)
+
+        self.crs = osr.CoordinateTransformation(src_srs, srs)
 
     def transform(self, xy):
         """
         xy is a QgsPointXY instance, usually a SecondaryCoordinates's xy
         property
         """
-        line, sta, _ = self.crs.TransformPoint(xy.y(), xy.x())
+        try:
+            line, sta, _ = self.crs.TransformPoint(xy.y(), xy.x())
+        except RuntimeError as e:
+            raise QgsCsException(e)
         return (line, sta)
 
 
@@ -455,8 +493,17 @@ class SecondaryCoordinates(QWidget):
         canvas = self.iface.mapCanvas()
         canvas.xyCoordinates.connect(self.read_coords)
 
+        # update the source crs when a project is
+        # opened or at startup (when it is None).
+        self.iface.projectRead.connect(self.update_src_crs)
+
     def unload(self):
         self.iface.mainWindow().statusBar().removeWidget(self)
+
+    def update_src_crs(self):
+        src_crs = QgsProject.instance().crs()
+        if self._crs.sourceCrs() != src_crs:
+            self._crs.setSourceCrs(src_crs)
 
     def update_from_settings(self, settings=None):
         """
@@ -491,7 +538,16 @@ class SecondaryCoordinates(QWidget):
 
         """
         self.xy = xy
-        x, y = self._crs.transform(self.xy)
+
+        # in case a crs change was missed
+        self.update_src_crs()
+
+        try:
+            x, y = self._crs.transform(self.xy)
+        except QgsCsException:
+            self.edit.setText("")
+            return
+
         x = x / self.scaler
         y = y / self.scaler
         self.edit.setText(self._x_formatter(x) + ", " + self._y_formatter(y))
