@@ -92,15 +92,12 @@ class CalcofiTransformer:
         else:
             self.src_crs = src_crs
 
-        if self.src_crs is None:
-            # can be None at startup before a project is open
-            # assume lon/lat and change as needed
-            self.src_crs = QgsCoordinateReferenceSystem("EPSG:4326")
-
-        #ll_srs = osr.SpatialReference()
-        #ll_srs.ImportFromEPSG(4326)
         src_srs = osr.SpatialReference()
-        src_srs.ImportFromWkt(self.src_crs.toWkt())
+        # this may puke on startup, when there is no srs
+        try:
+            src_srs.ImportFromWkt(self.src_crs.toWkt())
+        except RuntimeError:
+            src_srs.ImportFromEPSG(4326)
 
         srs = osr.SpatialReference()
         srs.ImportFromProj4("+proj=calcofi +ellps=clrk66")
